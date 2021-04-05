@@ -1,4 +1,10 @@
 from collections import deque
+from english_words import english_words_lower_alpha_set
+import string
+import enchant
+# natural language toolkit сан
+# from nltk.corpus import wordnet
+import time
 class Problem:
     def __init__(self, initial, goal_state=None):
         self.initial = initial
@@ -8,12 +14,12 @@ class Problem:
     def result(self, state, action):
         raise NotImplementedError
     def goal_test(self, state):
-        state == self.goal_state
-        # if isinstance(self.goal, list):
-        #     # return is_in(state, self.goal)
-        #     return 0
-        # else:
-        #     return 
+        # state == self.goal_state
+        if isinstance(self.goal_state, list):
+            # return is_in(state, self.goal)
+            return 0
+        else:
+            return state == self.goal_state
     def path_cost(self, c, state1, action, state2):
         return c + 1
     def value(self, state):
@@ -29,22 +35,64 @@ class Node:
         self.key = key
         if parent:
             self.depth = parent.depth + 1
-        if self.state:
-            self.map = ''.join(str(e) + ', ' for e in self.state)
     def __repr__(self):
         return "<Node {}>".format(self.state)
     def __lt__(self, node):
-        return self.map < node.map
+        return self.state < node.state
     def expand(self, problem):
         return [self.child_node(problem, action)
             for action in problem.actions(self.state)]
+
+    # graph-аа үүсгэх функц
+    def myexpand(self, problem):
+        # mygraph дээр өмнөх графаа аваад mysearch2 функцийг дуудна
+        mygraph = problem.graph.graph_dict
+        # frontier-с авсан үг болон ерөнхий графаар дуудна
+        mygraph = self.mysearch2(self.state, mygraph)
+        # print(mygraph)
+        return mygraph
+        
+    # Тухайн үгийн үсгүүдийг сольж үг мөн бол тухайн үгийн value-д хийх функц
+    # initialState - тухайн хайх үг
+    # graph - өмнөх графаа авах утга
+    def mysearch2(self, initialState, graph):
+        d = enchant.Dict("en_US")
+        # англи 26 үсэг
+        # үгийн урт * 26-н давталт хийнэ
+        letters = string.ascii_lowercase
+        # ugiin urt
+        wordLen = len(initialState)
+        # тухайн үгээр хайгаагүй бол хайлтуудыг хадгалах dict үүсгэв
+        if not initialState in graph:
+            graph[initialState] = dict()
+        # дээр үүсгэсэн dict-г хувьсагчид хадгалав
+        state_dict = graph[initialState]
+        for i in range(wordLen):
+            # орж ирсэн үг рүү index-ээр хандахын тулд list болгов
+            initial_state_in_list = list(initialState)
+            # тухайн үгийн анх байсан үсгийн хадгалав
+            baisan_letter = initial_state_in_list[i]
+            for j in letters:
+                # Анх байснаас бусад 25 тохиолдолд үгийн уртын тоогоор давтаж
+                # англи үг мөн бол dict-д хадгална
+                if j != baisan_letter:
+                    initial_state_in_list[i] = j
+                    new_state = ''.join(initial_state_in_list)
+                    # Англи үгийн санд байгаа эсэхийг шалгах хэсэг
+                    # if new_state in english_words_lower_alpha_set: # english_words сангийх
+                    if d.check(new_state): # enchant сангийх
+                    # if wordnet.synsets(new_state): # nltk.corpus.wordnet сангийх
+                       state_dict[new_state] = 1
+        # үүссэн шинэ граф-ийг буцаана
+        return graph
+    
     def child_node(self, problem, action):
         next_state = problem.result(self.state, action)
-        next_node = Node(next_state, self, action,
-        problem.path_cost(self.path_cost, self.state, action, next_state))
+        next_node = Node(next_state, self, action, problem.path_cost(self.path_cost, self.state, action, next_state))
         return next_node
     def solution(self):
-        return [node.action for node in self.path_cost[1:]]
+        # return [node.action for node in self.path_cost[1:]]
+        return [node.action for node in self.path()[1:]]
         # return 0
 
     def path(self):
@@ -54,7 +102,8 @@ class Node:
             node = node.parent
         return list(reversed(path_back))
     def __eq__(self, other):
-        return isinstance(other, Node) and self.map == other.map
+        # return isinstance(other, Node) and self.map == other.map
+        return isinstance(other, Node) and self.state == other.state
     def __hash__(self):
         return hash(self.state)
     
@@ -93,7 +142,7 @@ class GraphProblemStochastic(GraphProblem):
         raise NotImplementedError
 class Graph:
     def __init__(self, graph_dict=None, directed=True):
-        self.graph_dict = graph_dict or {}
+        self.graph_dict = graph_dict or {} # graph
         self.directed = directed
         if not directed:
             self.make_undirected()
@@ -130,9 +179,18 @@ def breadth_first_graph_search(problem):
     while frontier:
         node = frontier.popleft()
         explored.add(node.state)
+        # print(node.state)
+        # дээр үүсгэсэн функцээр тухайн үгийг үгнүүдэд хуваан задлах үйлдэл
+        graph = node.myexpand(problem)
         for child in node.expand(problem):
+            # print(child)
             if child.state not in explored and child not in frontier:
                 if problem.goal_test(child.state):
+                    print("Граф")
+                    # Хамгийн сүүлд үүссэн графаа recursive функц ашиглан задлав
+                    for key, value in recursive_items(problem.graph.graph_dict):
+                        # түлхүүр болон утгын түлхүүрүүдийг л хэвлэв
+                        print(key, {k for k in value.keys()})
                     return child
                 frontier.append(child)
     return None
@@ -143,14 +201,35 @@ def depth_first_graph_search(problem):
     while frontier:
         node = frontier.pop()
         if problem.goal_test(node.state):
+            print("Граф")
+            # print(problem.graph.graph_dict)
+            # Хамгийн сүүлд үүссэн графаа recursive функц ашиглан задлав
+            for key, value in recursive_items(problem.graph.graph_dict):
+                # түлхүүр болон утгын түлхүүрүүдийг л хэвлэв
+                print(key, {k for k in value.keys()})
             return node
         explored.add(node.state)
+        graph = node.myexpand(problem)
         frontier.extend(child for child in node.expand(problem)
         if child.state not in explored and child not in frontier)
     return None
+# nested dictionary задлах функц
+def recursive_items(dictionary):
+    for key, value in dictionary.items():
+        # хэрэв value нь dict бол функцийг дахин дуудна
+        if type(value) is dict:
+            yield (key, value)
+            yield from recursive_items(value)
+        # else:
+            # yield (key, value)
+# хугацаа миллисекундээр авах функц
+def current_milli_time():
+    return round(time.time() * 1000)
 import numpy as np
 def UndirectedGraph(graph_dict=None):
     return Graph(graph_dict=graph_dict, directed=False)
+
+# Жишээ граф
 romania_map = UndirectedGraph(dict(
     Arad=dict(Zerind=75, Sibiu=140, Timisoara=118),
     Bucharest=dict(Urziceni=85, Pitesti=101, Giurgiu=90,
@@ -166,21 +245,55 @@ romania_map = UndirectedGraph(dict(
     Pitesti=dict(Rimnicu=97),
     Rimnicu=dict(Sibiu=80),
     Urziceni=dict(Vaslui=142)))
+# Лабораторийн ажлын жишээ граф
+my_map = UndirectedGraph(dict(
+    fool = dict(foul=1, foil=1, cool=1, pool=1),
+    fail = dict(fall=1, foil=1),
+    pall = dict(pale=1, poll=1, fall=1),
+    poll = dict(pool=1, pole=1),
+    pope = dict(pole=1),
+    pale = dict(pole=1, sale=1, page=1),
+    sage = dict(sale=1, page=1)
+))
+# Тухайн үг үгийн санд байдаг эсэхийг шалгах функц
+def checkWord(word):
+    if word in english_words_lower_alpha_set:
+        return True
+    else:
+        return False
 def GraphSearch():
-    problem = GraphProblem('Arad', 'Bucharest', romania_map)
-    searcher = breadth_first_graph_search
+    first = input("Эхний үгийг оруулна уу.")
+    while not checkWord(first):
+        first = input("Боломжгүй үг байна. Дахин оруулна уу.")
+    last = input("Хувиргах үгийг оруулна уу.")
+    while not checkWord(last):
+        last = input("Боломжгүй үг байна. Дахин оруулна уу.")
+    # problem = GraphProblem('fool', 'sage', my_map)
+    # Хоосон dict утгатай граф-тай, анхны болон зорилгын төлөвтэй асуудал үүсгэв
+    problem = GraphProblem(first, last, UndirectedGraph(dict()))
+    searcher = breadth_first_graph_search # depth_first_graph_search
     def do(searcher, problem):
+        t = current_milli_time() # Хайлт хийхээс өмнөх цагийг авав
         goal_node = searcher(problem)
-        print('Search algorithm ', 'breadth_first_graph_search')
-        print('List of nodes visited:', Node.solution(goal_node),
-        ' path cost:', goal_node.path_cost)
-        do(searcher, problem)
-        GraphSearch()
+        t = current_milli_time() - t # Хайлт дууссаны дараах цагийг аван хасав
+        print(f"Хайлт хийсэн хугацаа {t}ms")
+        if goal_node != None: # Хайлтаас хариу олдвол
+            print('Хайлтын алгоритм ', searcher.__name__)
+            print('Орсон node-үүд :', Node.solution(goal_node),
+            ' path cost:', goal_node.path_cost)
+        else: # хариу олдоогүй бол
+            print("Граф")
+            # Хамгийн сүүлд үүссэн графаа recursive функц ашиглан задлав
+            for key, value in recursive_items(problem.graph.graph_dict):
+                # түлхүүр болон утгын түлхүүрүүдийг л хэвлэв
+                print(key, {k for k in value.keys()})
+            print('үгийг холбох боломжгүй')
     
     do(searcher, problem)
 
 def main():
     GraphSearch()
+    
 
 if __name__ == "__main__":
     main()
